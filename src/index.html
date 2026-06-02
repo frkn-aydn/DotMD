@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' file: data: https: http:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <title>DotMD</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="topbar-section topbar-left">
+        <div class="brand">
+          <img class="brand-logo" src="logo.svg" alt="DotMD" width="47" height="28">
+        </div>
+        <span class="divider"></span>
+        <div class="open-actions">
+          <button id="btn-open-file" class="btn-ghost" title="Open file (⌘O)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+              <path d="M14 3v5h5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+            </svg>
+            <span>Open File</span>
+          </button>
+          <button id="btn-open-folder" class="btn-ghost" title="Open folder (⌘⇧O)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+            </svg>
+            <span>Open Folder</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="mode-switch" role="tablist" aria-label="View mode">
+        <button class="mode-btn active" data-mode="view" role="tab" aria-selected="true">View</button>
+        <button class="mode-btn" data-mode="edit" role="tab" aria-selected="false">Edit</button>
+        <button class="mode-btn" data-mode="split" role="tab" aria-selected="false">Split</button>
+      </div>
+
+      <div class="topbar-section topbar-right">
+        <button id="btn-close" class="btn-ghost" title="Close file (⌘W)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+          <span>Close</span>
+        </button>
+        <button id="btn-save" class="btn-ghost" disabled title="Save (⌘S)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M5 3h11l3 3v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+            <path d="M8 3v5h7M8 21v-7h8v7" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+          </svg>
+          <span>Save</span>
+        </button>
+        <button id="btn-theme" class="btn-icon" title="Toggle theme">
+          <svg class="icon-sun" width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.6"/>
+            <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+          <svg class="icon-moon" width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <aside id="sidebar" class="sidebar hidden">
+        <div class="sidebar-header">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+          </svg>
+          <span id="folder-name" class="folder-name"></span>
+        </div>
+        <ul id="file-list" class="file-list"></ul>
+      </aside>
+
+      <main id="content" class="content">
+        <div id="empty-state" class="empty-state">
+          <div class="empty-icon">
+            <img class="empty-logo" src="logo.svg" alt="" width="94" height="56">
+          </div>
+          <p class="empty-subtitle">Open a Markdown file or a folder to start reading and editing.</p>
+          <div class="empty-actions">
+            <button id="empty-open-file" class="btn-primary">Open File</button>
+            <button id="empty-open-folder" class="btn-secondary">Open Folder</button>
+          </div>
+        </div>
+
+        <div id="editor-pane" class="pane editor-pane hidden">
+          <textarea id="editor" spellcheck="true" placeholder="Start writing…"></textarea>
+        </div>
+
+        <div id="preview-pane" class="pane preview-pane hidden">
+          <article id="preview" class="markdown-body"></article>
+        </div>
+      </main>
+    </div>
+
+    <footer class="statusbar">
+      <span id="status-file" class="status-item">No file open</span>
+      <span class="status-spacer"></span>
+      <span id="status-mode" class="status-item">View</span>
+      <span id="status-stats" class="status-item"></span>
+    </footer>
+  </div>
+
+  <script src="vendor/marked.min.js"></script>
+  <script src="renderer.js"></script>
+</body>
+</html>

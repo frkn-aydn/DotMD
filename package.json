@@ -1,0 +1,98 @@
+{
+  "name": "dotmd",
+  "productName": "DotMD",
+  "version": "1.0.0",
+  "description": "DotMD — a minimal, cross-platform Markdown viewer and editor with View, Edit, and Split modes.",
+  "main": "main.js",
+  "author": "Furkan AYDIN",
+  "license": "MIT",
+  "homepage": "./",
+  "scripts": {
+    "start": "env -u ELECTRON_RUN_AS_NODE electron .",
+    "dev": "env -u ELECTRON_RUN_AS_NODE electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "keywords": [
+    "dotmd",
+    "markdown",
+    "editor",
+    "viewer",
+    "electron",
+    "preview"
+  ],
+  "devDependencies": {
+    "electron": "^42.3.0",
+    "electron-builder": "^26.8.1",
+    "marked": "^15.0.0"
+  },
+  "build": {
+    "appId": "com.furkanaydin.dotmd",
+    "productName": "DotMD",
+    "copyright": "Copyright © 2026 Furkan AYDIN",
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "!**/*.map"
+    ],
+    "fileAssociations": [
+      {
+        "ext": "md",
+        "name": "Markdown",
+        "description": "Markdown document",
+        "mimeType": "text/markdown",
+        "role": "Editor"
+      },
+      {
+        "ext": "markdown",
+        "name": "Markdown",
+        "description": "Markdown document",
+        "mimeType": "text/markdown",
+        "role": "Editor"
+      },
+      {
+        "ext": "mdown",
+        "name": "Markdown",
+        "description": "Markdown document",
+        "mimeType": "text/markdown",
+        "role": "Editor"
+      },
+      {
+        "ext": "mkd",
+        "name": "Markdown",
+        "description": "Markdown document",
+        "mimeType": "text/markdown",
+        "role": "Editor"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "extendInfo": {
+        "CFBundleDisplayName": "DotMD",
+        "CFBundleName": "DotMD"
+      },
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        "nsis"
+      ]
+    },
+    "linux": {
+      "icon": "build/icon.png",
+      "category": "Office",
+      "target": [
+        "AppImage"
+      ]
+    }
+  }
+}
