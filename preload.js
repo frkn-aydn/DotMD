@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('api', {
   listFolder: (folderPath) => ipcRenderer.invoke('list-folder', folderPath),
   watchFolder: (folderPath) => ipcRenderer.invoke('watch-folder', folderPath),
   unwatchFolder: () => ipcRenderer.invoke('unwatch-folder'),
+  getSystemFonts: () => ipcRenderer.invoke('get-system-fonts'),
   resolveImagePath: (markdownFilePath, src) =>
     ipcRenderer.invoke('resolve-image-path', markdownFilePath, src),
 
@@ -22,4 +23,6 @@ contextBridge.exposeInMainWorld('api', {
   onOpenFilePath: (callback) => ipcRenderer.on('open-file-path', (_event, filePath) => callback(filePath)),
   onFolderChanged: (callback) =>
     ipcRenderer.on('folder-changed', (_event, payload) => callback(payload)),
+  onFontsUpdated: (callback) =>
+    ipcRenderer.on('fonts-updated', (_event, fonts) => callback(fonts)),
 });
