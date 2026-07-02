@@ -15,7 +15,7 @@ Markdown deserves a calm place to read and write. DotMD keeps the interface out 
 - **Open a file or a folder** — browse `.md` files in a sidebar when you open a directory
 - **Three modes** — **View** (preview), **Edit** (plain text), **Split** (side by side)
 - **Live preview** — rendered Markdown updates as you type (in Edit and Split)
-- **Light & dark themes** — follows your system appearance, with a manual toggle that is remembered
+- **Themes & settings** — system, light, dark, sepia, and more; font and editor options in Settings
 - **Status bar** — current file, mode, word count, and character count
 - **Keyboard shortcuts** — standard shortcuts for open, save, and close
 - **Minimal UI** — no clutter; tools appear when you need them
@@ -65,6 +65,20 @@ make clean        # remove dist/
 ```
 
 Cross-compiling has limits: building Windows installers from macOS needs Wine; building Linux from macOS often needs Docker. Building on each target OS is the most reliable approach.
+
+## Install on macOS (Homebrew)
+
+```bash
+brew tap frkn-aydn/dotmd
+brew trust frkn-aydn/dotmd
+brew install --cask dotmd
+```
+
+Homebrew requires trusting third-party taps once before the first install.
+
+Upgrade later with `brew upgrade --cask dotmd`.
+
+The tap lives in [frkn-aydn/homebrew-dotmd](https://github.com/frkn-aydn/homebrew-dotmd). Maintainer notes for publishing updates are in [`homebrew/README.md`](homebrew/README.md).
 
 ## Open `.md` files with DotMD
 
