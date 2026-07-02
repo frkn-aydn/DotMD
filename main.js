@@ -15,6 +15,9 @@ app.setAppUserModelId('com.furkanaydin.dotmd');
 
 let mainWindow;
 const pendingOpenPaths = [];
+let folderWatcher = null;
+let folderWatchPath = null;
+let folderWatchTimer = null;
 
 const MARKDOWN_EXT = /\.(md|markdown|mdown|mkd)$/i;
 
@@ -151,6 +154,10 @@ function buildMenu() {
         { role: 'resetZoom' },
         { role: 'zoomIn' },
         { role: 'zoomOut' },
+        { label: 'Toggle Sidebar', accelerator: 'CmdOrCtrl+B', click: send('menu-toggle-sidebar') },
+        { label: 'Find in File…', accelerator: 'CmdOrCtrl+F', click: send('menu-find') },
+        { type: 'separator' },
+        { label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: send('menu-settings') },
         { type: 'separator' },
         { role: 'togglefullscreen' },
         { role: 'toggleDevTools' },
@@ -215,6 +222,63 @@ ipcMain.handle('save-file', async (_event, filePath, content) => {
 
 ipcMain.handle('list-folder', async (_event, folderPath) => {
   return readDirectory(folderPath);
+});
+
+function stopFolderWatch() {
+  if (folderWatchTimer) {
+    clearTimeout(folderWatchTimer);
+    folderWatchTimer = null;
+  }
+  if (folderWatcher) {
+    folderWatcher.close();
+    folderWatcher = null;
+  }
+  folderWatchPath = null;
+}
+
+async function emitFolderChanged(folderPath) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  try {
+    const items = await readDirectory(folderPath);
+    mainWindow.webContents.send('folder-changed', { folderPath, items });
+  } catch {
+    /* ignore read errors during watch */
+  }
+}
+
+function scheduleFolderRefresh(folderPath) {
+  if (folderWatchTimer) clearTimeout(folderWatchTimer);
+  folderWatchTimer = setTimeout(() => {
+    folderWatchTimer = null;
+    emitFolderChanged(folderPath);
+  }, 300);
+}
+
+ipcMain.handle('watch-folder', async (_event, folderPath) => {
+  if (!folderPath) return { success: false };
+
+  const resolved = path.resolve(folderPath);
+  if (folderWatchPath === resolved && folderWatcher) {
+    return { success: true };
+  }
+
+  stopFolderWatch();
+
+  try {
+    folderWatcher = fs.watch(resolved, { persistent: false }, () => {
+      scheduleFolderRefresh(resolved);
+    });
+    folderWatchPath = resolved;
+    return { success: true };
+  } catch {
+    stopFolderWatch();
+    return { success: false };
+  }
+});
+
+ipcMain.handle('unwatch-folder', async () => {
+  stopFolderWatch();
+  return { success: true };
 });
 
 ipcMain.handle('resolve-image-path', async (_event, markdownFilePath, src) => {

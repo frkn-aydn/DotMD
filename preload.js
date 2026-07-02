@@ -7,6 +7,8 @@ contextBridge.exposeInMainWorld('api', {
   readFile: (filePath) => ipcRenderer.invoke('read-file', filePath),
   saveFile: (filePath, content) => ipcRenderer.invoke('save-file', filePath, content),
   listFolder: (folderPath) => ipcRenderer.invoke('list-folder', folderPath),
+  watchFolder: (folderPath) => ipcRenderer.invoke('watch-folder', folderPath),
+  unwatchFolder: () => ipcRenderer.invoke('unwatch-folder'),
   resolveImagePath: (markdownFilePath, src) =>
     ipcRenderer.invoke('resolve-image-path', markdownFilePath, src),
 
@@ -14,5 +16,10 @@ contextBridge.exposeInMainWorld('api', {
   onMenuOpenFolder: (callback) => ipcRenderer.on('menu-open-folder', callback),
   onMenuSave: (callback) => ipcRenderer.on('menu-save', callback),
   onMenuCloseFile: (callback) => ipcRenderer.on('menu-close-file', callback),
+  onMenuToggleSidebar: (callback) => ipcRenderer.on('menu-toggle-sidebar', callback),
+  onMenuFind: (callback) => ipcRenderer.on('menu-find', callback),
+  onMenuSettings: (callback) => ipcRenderer.on('menu-settings', callback),
   onOpenFilePath: (callback) => ipcRenderer.on('open-file-path', (_event, filePath) => callback(filePath)),
+  onFolderChanged: (callback) =>
+    ipcRenderer.on('folder-changed', (_event, payload) => callback(payload)),
 });

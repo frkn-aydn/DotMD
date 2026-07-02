@@ -14,6 +14,11 @@
         <div class="brand">
           <img class="brand-logo" src="logo.svg" alt="DotMD" width="47" height="28">
         </div>
+        <button id="btn-toggle-sidebar" class="btn-icon" title="Toggle sidebar (⌘B)" disabled>
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M4 6h16M4 12h10M4 18h16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+        </button>
         <span class="divider"></span>
         <div class="open-actions">
           <button id="btn-open-file" class="btn-ghost" title="Open file (⌘O)">
@@ -61,6 +66,12 @@
             <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
           </svg>
         </button>
+        <button id="btn-settings" class="btn-icon" title="Settings (⌘,)">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.6"/>
+            <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+        </button>
       </div>
     </header>
 
@@ -71,11 +82,51 @@
             <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
           </svg>
           <span id="folder-name" class="folder-name"></span>
+          <div class="sidebar-header-actions">
+            <button id="btn-refresh-folder" class="btn-icon btn-icon-sm" title="Refresh file list">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M21 12a9 9 0 1 1-2.64-6.36" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                <path d="M21 3v6h-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="sidebar-search">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="11" cy="11" r="6" stroke="currentColor" stroke-width="1.6"/>
+            <path d="M16 16l4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+          <input id="file-list-search" type="search" placeholder="Filter files…" autocomplete="off" spellcheck="false">
         </div>
         <ul id="file-list" class="file-list"></ul>
+        <p id="file-list-empty" class="file-list-empty hidden">No matching files</p>
       </aside>
 
       <main id="content" class="content">
+        <div id="find-bar" class="find-bar hidden" role="search">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="11" cy="11" r="6" stroke="currentColor" stroke-width="1.6"/>
+            <path d="M16 16l4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+          <input id="find-input" type="search" placeholder="Find in file…" autocomplete="off" spellcheck="false">
+          <span id="find-count" class="find-count"></span>
+          <button id="find-prev" class="btn-icon btn-icon-sm" title="Previous (Shift+Enter)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M6 14l6-6 6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <button id="find-next" class="btn-icon btn-icon-sm" title="Next (Enter)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M6 10l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <button id="find-close" class="btn-icon btn-icon-sm" title="Close (Esc)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+
         <div id="empty-state" class="empty-state">
           <div class="empty-icon">
             <img class="empty-logo" src="logo.svg" alt="" width="94" height="56">
@@ -103,6 +154,108 @@
       <span id="status-mode" class="status-item">View</span>
       <span id="status-stats" class="status-item"></span>
     </footer>
+  </div>
+
+  <div id="settings-overlay" class="settings-overlay hidden" aria-hidden="true">
+    <div class="settings-modal" role="dialog" aria-labelledby="settings-title" aria-modal="true">
+      <div class="settings-header">
+        <h2 id="settings-title">Settings</h2>
+        <button id="settings-close" class="btn-icon" title="Close">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+      <div class="settings-body">
+        <section class="settings-section">
+          <h3>Appearance</h3>
+          <label class="settings-field">
+            <span>Theme</span>
+            <select id="setting-theme">
+              <option value="system">System</option>
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+              <option value="sepia">Sepia</option>
+            </select>
+          </label>
+        </section>
+        <section class="settings-section">
+          <h3>Preview</h3>
+          <label class="settings-field">
+            <span>Font size</span>
+            <input id="setting-preview-font-size" type="number" min="12" max="24" step="1">
+          </label>
+          <label class="settings-field">
+            <span>Font family</span>
+            <select id="setting-preview-font-family">
+              <option value="sans">Sans-serif</option>
+              <option value="serif">Serif</option>
+            </select>
+          </label>
+          <label class="settings-field">
+            <span>Max width (px)</span>
+            <input id="setting-preview-max-width" type="number" min="480" max="1200" step="20">
+          </label>
+          <label class="settings-field">
+            <span>Line height</span>
+            <input id="setting-preview-line-height" type="number" min="1.2" max="2.5" step="0.1">
+          </label>
+        </section>
+        <section class="settings-section">
+          <h3>Editor</h3>
+          <label class="settings-field">
+            <span>Font size</span>
+            <input id="setting-editor-font-size" type="number" min="11" max="24" step="1">
+          </label>
+          <label class="settings-field">
+            <span>Tab size</span>
+            <input id="setting-editor-tab-size" type="number" min="2" max="8" step="1">
+          </label>
+          <label class="settings-field settings-checkbox">
+            <input id="setting-editor-line-wrap" type="checkbox">
+            <span>Line wrapping</span>
+          </label>
+          <label class="settings-field settings-checkbox">
+            <input id="setting-editor-spellcheck" type="checkbox">
+            <span>Spellcheck</span>
+          </label>
+          <label class="settings-field settings-checkbox">
+            <input id="setting-editor-insert-spaces" type="checkbox">
+            <span>Insert spaces for tabs</span>
+          </label>
+        </section>
+        <section class="settings-section">
+          <h3>Markdown</h3>
+          <label class="settings-field settings-checkbox">
+            <input id="setting-markdown-breaks" type="checkbox">
+            <span>GFM line breaks</span>
+          </label>
+          <label class="settings-field">
+            <span>Default view mode</span>
+            <select id="setting-default-mode">
+              <option value="view">View</option>
+              <option value="edit">Edit</option>
+              <option value="split">Split</option>
+            </select>
+          </label>
+        </section>
+        <section class="settings-section">
+          <h3>Files</h3>
+          <label class="settings-field settings-checkbox">
+            <input id="setting-auto-refresh" type="checkbox">
+            <span>Auto-refresh folder</span>
+          </label>
+          <label class="settings-field settings-checkbox">
+            <input id="setting-auto-save" type="checkbox">
+            <span>Auto-save</span>
+          </label>
+          <label class="settings-field">
+            <span>Auto-save interval (seconds)</span>
+            <input id="setting-auto-save-interval" type="number" min="10" max="600" step="10">
+          </label>
+        </section>
+      </div>
+    </div>
   </div>
 
   <script src="vendor/marked.min.js"></script>
