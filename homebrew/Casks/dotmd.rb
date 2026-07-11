@@ -1,5 +1,5 @@
 cask "dotmd" do
-  version "1.1.0"
+  version "1.2.0"
 
   on_arm do
     sha256 "526b78493e641bc7a3e9f728290ff2b42d6ad0e06c46c733b825b6c9c4626015"
