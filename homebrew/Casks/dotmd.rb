@@ -2,11 +2,11 @@ cask "dotmd" do
   version "1.2.0"
 
   on_arm do
-    sha256 "526b78493e641bc7a3e9f728290ff2b42d6ad0e06c46c733b825b6c9c4626015"
+    sha256 "f7926c7bc67059fc070e79aa59f8ed7f32d7986abbe0e902394e4a0428ae06ab"
     url "https://github.com/frkn-aydn/DotMD/releases/download/v#{version}/DotMD-#{version}-arm64.dmg"
   end
   on_intel do
-    sha256 "85697a2f36b27e29416bdcd68b61a78e859a3f57e0d84200a359008b7e96a0ae"
+    sha256 "30417e7654c5a48388c43e33066d5048ad78cafb63485941f70cf5942a81e35e"
     url "https://github.com/frkn-aydn/DotMD/releases/download/v#{version}/DotMD-#{version}.dmg"
   end
 
