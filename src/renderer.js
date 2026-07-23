@@ -108,6 +108,7 @@ const elements = {
   editorPane: $('#editor-pane'),
   previewPane: $('#preview-pane'),
   editor: $('#editor'),
+  editorHighlights: $('#editor-highlights'),
   preview: $('#preview'),
   statusFile: $('#status-file'),
   statusMode: $('#status-mode'),
@@ -530,6 +531,7 @@ function applySettings() {
   elements.editor.style.overflowWrap = editor.lineWrap ? 'break-word' : 'normal';
   elements.editor.spellcheck = editor.spellcheck;
   elements.editor.style.tabSize = editor.tabSize;
+  syncEditorHighlightLayout();
 
   marked.setOptions({
     gfm: true,
@@ -1873,6 +1875,83 @@ function escapeRegExp(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function escapeHtml(str) {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function syncEditorHighlightLayout() {
+  const editor = elements.editor;
+  const layer = elements.editorHighlights;
+  if (!layer) return;
+
+  // Match the textarea content box exactly. A wider overlay wraps differently
+  // (scrollbar gutter / narrow split panes) and shifts highlights off the text.
+  const style = getComputedStyle(editor);
+  layer.style.boxSizing = style.boxSizing;
+  layer.style.padding = style.padding;
+  layer.style.border = style.border;
+  layer.style.font = style.font;
+  layer.style.fontFamily = style.fontFamily;
+  layer.style.fontSize = style.fontSize;
+  layer.style.fontWeight = style.fontWeight;
+  layer.style.fontStyle = style.fontStyle;
+  layer.style.lineHeight = style.lineHeight;
+  layer.style.letterSpacing = style.letterSpacing;
+  layer.style.wordSpacing = style.wordSpacing;
+  layer.style.textAlign = style.textAlign;
+  layer.style.textIndent = style.textIndent;
+  layer.style.whiteSpace = style.whiteSpace;
+  layer.style.overflowWrap = style.overflowWrap;
+  layer.style.wordBreak = style.wordBreak;
+  layer.style.tabSize = style.tabSize;
+  layer.style.width = `${editor.clientWidth}px`;
+  layer.style.height = `${editor.clientHeight}px`;
+}
+
+function syncEditorHighlightScroll() {
+  const layer = elements.editorHighlights;
+  if (!layer) return;
+  layer.scrollTop = elements.editor.scrollTop;
+  layer.scrollLeft = elements.editor.scrollLeft;
+}
+
+function clearEditorHighlights() {
+  if (!elements.editorHighlights) return;
+  elements.editorHighlights.innerHTML = '';
+}
+
+function highlightEditorMatches() {
+  const layer = elements.editorHighlights;
+  if (!layer) return;
+
+  const text = elements.editor.value;
+  const query = state.findQuery.trim();
+  if (!query || !state.findMatches.length) {
+    clearEditorHighlights();
+    return;
+  }
+
+  syncEditorHighlightLayout();
+
+  let html = '';
+  let lastIndex = 0;
+  state.findMatches.forEach((match, index) => {
+    html += escapeHtml(text.slice(lastIndex, match.start));
+    const cls = index === state.findIndex ? 'search-hit search-hit-current' : 'search-hit';
+    html += `<mark class="${cls}">${escapeHtml(text.slice(match.start, match.end))}</mark>`;
+    lastIndex = match.end;
+  });
+  html += escapeHtml(text.slice(lastIndex));
+  // Trailing newline keeps height in sync with the textarea.
+  layer.innerHTML = `${html}\n`;
+  syncEditorHighlightLayout();
+  syncEditorHighlightScroll();
+}
+
 function getFindMatches() {
   const query = state.findQuery.trim();
   if (!query) return [];
@@ -1976,9 +2055,10 @@ function scrollToPreviewMatch(index) {
 function scrollEditorToMatch(index) {
   const match = state.findMatches[index];
   if (!match) return;
-  elements.editor.focus();
+  // Keep focus on the find input while searching; only move the selection/scroll.
   elements.editor.setSelectionRange(match.start, match.end);
   scrollTextareaToSelection(elements.editor);
+  syncEditorHighlightScroll();
 }
 
 function scrollTextareaToSelection(textarea) {
@@ -2001,19 +2081,21 @@ function refreshFindHighlights() {
 
   if (elements.findBar.classList.contains('hidden') || !state.findQuery.trim()) {
     clearPreviewHighlights();
+    clearEditorHighlights();
     return;
   }
 
-  if (state.mode === 'view' || state.mode === 'split') {
+  if (state.mode === 'view') {
+    clearEditorHighlights();
     highlightPreviewMatches();
     if (state.findMatches.length) scrollToPreviewMatch(state.findIndex);
-  } else {
-    clearPreviewHighlights();
+    return;
   }
 
-  if (state.mode === 'edit' || state.mode === 'split') {
-    if (state.findMatches.length) scrollEditorToMatch(state.findIndex);
-  }
+  // Edit and split: search/highlight only in the editor.
+  clearPreviewHighlights();
+  highlightEditorMatches();
+  if (state.findMatches.length) scrollEditorToMatch(state.findIndex);
 }
 
 function openFindBar() {
@@ -2032,6 +2114,7 @@ function closeFindBar() {
   elements.findInput.value = '';
   elements.findCount.textContent = '';
   clearPreviewHighlights();
+  clearEditorHighlights();
 }
 
 function findNext(backward = false) {
@@ -2048,13 +2131,15 @@ function findNext(backward = false) {
 
   updateFindCount();
 
-  if (state.mode === 'view' || state.mode === 'split') {
+  if (state.mode === 'view') {
     highlightPreviewMatches();
     scrollToPreviewMatch(state.findIndex);
+    return;
   }
-  if (state.mode === 'edit' || state.mode === 'split') {
-    scrollEditorToMatch(state.findIndex);
-  }
+
+  // Edit and split: navigate matches only in the editor.
+  highlightEditorMatches();
+  scrollEditorToMatch(state.findIndex);
 }
 
 function initFindBar() {
@@ -2106,7 +2191,20 @@ function initEditor() {
 
   elements.editor.addEventListener('keyup', scheduleSplitScrollSync);
   elements.editor.addEventListener('click', scheduleSplitScrollSync);
-  elements.editor.addEventListener('scroll', scheduleSplitScrollSync);
+  elements.editor.addEventListener('scroll', () => {
+    syncEditorHighlightScroll();
+    scheduleSplitScrollSync();
+  });
+
+  if (typeof ResizeObserver !== 'undefined') {
+    const scheduleHighlightRelayout = debounce(() => {
+      if (elements.findBar.classList.contains('hidden')) return;
+      if (state.mode !== 'edit' && state.mode !== 'split') return;
+      if (!state.findQuery.trim()) return;
+      highlightEditorMatches();
+    }, 50);
+    new ResizeObserver(scheduleHighlightRelayout).observe(elements.editor);
+  }
 
   document.addEventListener('selectionchange', () => {
     if (state.mode === 'split' && document.activeElement === elements.editor) {

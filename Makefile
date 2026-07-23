@@ -20,8 +20,8 @@
 #   - `--publish never` ensures a local build is never uploaded anywhere.
 
 # Unset ELECTRON_RUN_AS_NODE so tooling behaves consistently, then run the
-# locally installed electron-builder via npx.
-EB := env -u ELECTRON_RUN_AS_NODE npx electron-builder --publish never
+# locally installed electron-builder via pnpm.
+EB := env -u ELECTRON_RUN_AS_NODE pnpm exec electron-builder --publish never
 
 .PHONY: all install mac mac-intel mac-arm win linux clean help
 
@@ -37,8 +37,7 @@ help:
 	@echo "  make clean       Remove the dist/ output directory"
 
 install:
-	npm install
-	npm install -D electron-builder
+	pnpm install
 
 all: mac win linux
 

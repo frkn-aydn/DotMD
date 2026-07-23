@@ -176,7 +176,10 @@
         </div>
 
         <div id="editor-pane" class="pane editor-pane hidden">
-          <textarea id="editor" spellcheck="true" placeholder="Start writing…"></textarea>
+          <div class="editor-wrap">
+            <div id="editor-highlights" class="editor-highlights" aria-hidden="true"></div>
+            <textarea id="editor" spellcheck="true" placeholder="Start writing…"></textarea>
+          </div>
         </div>
 
         <div id="preview-pane" class="pane preview-pane hidden">

@@ -1,12 +1,13 @@
 {
   "name": "dotmd",
   "productName": "DotMD",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "DotMD — a minimal, cross-platform Markdown viewer and editor with View, Edit, and Split modes.",
   "main": "main.js",
   "author": "Furkan AYDIN",
   "license": "MIT",
   "homepage": "./",
+  "packageManager": "pnpm@11.15.0",
   "scripts": {
     "start": "env -u ELECTRON_RUN_AS_NODE electron .",
     "dev": "env -u ELECTRON_RUN_AS_NODE electron .",
