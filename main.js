@@ -3,10 +3,35 @@ const path = require('path');
 const fs = require('fs');
 const fsp = require('fs').promises;
 const { pathToFileURL } = require('url');
-const { execFile } = require('child_process');
-const { promisify } = require('util');
 
-const execFileAsync = promisify(execFile);
+const meta = require('./lib/meta');
+const { readDirectory, createFolderWatchController } = require('./lib/folder');
+const fonts = require('./lib/fonts');
+
+const {
+  initMeta,
+  MARKDOWN_EXT,
+  DEFAULT_FILE_META,
+  isMarkdownFile,
+  loadFallbackMetaStoreSync,
+  saveFallbackMetaStoreSync,
+  invalidateMetaCache,
+  readFileMeta,
+  writeFileMeta,
+  ensureMarkdownExtension,
+  uniqueFilePath,
+} = meta;
+
+const {
+  getSystemFonts,
+  loadFontCacheSync,
+  startFontScan,
+  setFontsBroadcast,
+  getCachedSystemFonts,
+} = fonts;
+
+initMeta(app);
+fonts.initFonts(app);
 
 const APP_NAME = 'DotMD';
 const isMac = process.platform === 'darwin';
@@ -19,181 +44,27 @@ app.setAppUserModelId('com.furkanaydin.dotmd');
 
 let mainWindow;
 const pendingOpenPaths = [];
-let folderWatcher = null;
-let folderWatchPath = null;
-let folderWatchTimer = null;
-let cachedSystemFonts = null;
-let fontScanPromise = null;
+let rendererDirty = false;
+let isQuitting = false;
 
-function getFontCachePath() {
-  return path.join(app.getPath('userData'), 'system-fonts-cache.json');
-}
-
-function loadFontCacheSync() {
-  try {
-    const raw = fs.readFileSync(getFontCachePath(), 'utf-8');
-    const parsed = JSON.parse(raw);
-    if (parsed.platform && parsed.platform !== process.platform) return false;
-    if (Array.isArray(parsed.fonts) && parsed.fonts.length) {
-      cachedSystemFonts = parsed.fonts;
-      return true;
+const folderWatch = createFolderWatchController({
+  onChange: (folderPath, items) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('folder-changed', { folderPath, items });
     }
-  } catch {
-    /* no cache yet */
+  },
+  onError: ({ folderPath }) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('folder-watch-error', { folderPath });
+    }
+  },
+});
+
+setFontsBroadcast((fontList) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('fonts-updated', fontList);
   }
-  return false;
-}
-
-function mergeFontLists(existing, scanned) {
-  return sortFontFamilies([...(existing || []), ...(scanned || [])]);
-}
-
-function fontsListChanged(before, after) {
-  if (!before || before.length !== after.length) return true;
-  for (let i = 0; i < before.length; i += 1) {
-    if (before[i] !== after[i]) return true;
-  }
-  return false;
-}
-
-const MARKDOWN_EXT = /\.(md|markdown|mdown|mkd)$/i;
-const META_ATTR = 'com.dotmd.meta';
-const DEFAULT_FILE_META = { tags: [], pinned: false };
-
-function isMarkdownFile(filePath) {
-  return MARKDOWN_EXT.test(filePath);
-}
-
-function getFileMetaFallbackPath() {
-  return path.join(app.getPath('userData'), 'dotmd-file-meta.json');
-}
-
-function loadFallbackMetaStoreSync() {
-  try {
-    const raw = fs.readFileSync(getFileMetaFallbackPath(), 'utf-8');
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveFallbackMetaStoreSync(store) {
-  fs.writeFileSync(getFileMetaFallbackPath(), JSON.stringify(store), 'utf-8');
-}
-
-function normalizeFileMeta(meta) {
-  const tags = Array.isArray(meta?.tags)
-    ? meta.tags.filter((t) => typeof t === 'string' && t.trim()).map((t) => t.trim())
-    : [];
-  return {
-    tags: [...new Set(tags)],
-    pinned: Boolean(meta?.pinned),
-  };
-}
-
-async function readXattrRaw(filePath) {
-  try {
-    if (process.platform === 'darwin') {
-      const { stdout } = await execFileAsync('xattr', ['-p', META_ATTR, filePath], {
-        encoding: 'utf-8',
-      });
-      return stdout.trim();
-    }
-    if (process.platform === 'linux') {
-      const { stdout } = await execFileAsync(
-        'getfattr',
-        ['-n', `user.${META_ATTR}`, '--only-values', filePath],
-        { encoding: 'utf-8' },
-      );
-      return stdout.trim();
-    }
-    if (process.platform === 'win32') {
-      return (await fsp.readFile(`${filePath}:${META_ATTR}`, 'utf-8')).trim();
-    }
-  } catch {
-    /* no xattr / ADS */
-  }
-  return null;
-}
-
-async function writeXattrRaw(filePath, value) {
-  try {
-    if (process.platform === 'darwin') {
-      await execFileAsync('xattr', ['-w', META_ATTR, value, filePath]);
-      return true;
-    }
-    if (process.platform === 'linux') {
-      await execFileAsync('setfattr', ['-n', `user.${META_ATTR}`, '-v', value, filePath]);
-      return true;
-    }
-    if (process.platform === 'win32') {
-      await fsp.writeFile(`${filePath}:${META_ATTR}`, value, 'utf-8');
-      return true;
-    }
-  } catch {
-    return false;
-  }
-  return false;
-}
-
-async function readFileMeta(filePath) {
-  const resolved = path.resolve(filePath);
-  const raw = await readXattrRaw(resolved);
-  if (raw) {
-    try {
-      return normalizeFileMeta(JSON.parse(raw));
-    } catch {
-      /* fall through */
-    }
-  }
-
-  const store = loadFallbackMetaStoreSync();
-  if (store[resolved]) return normalizeFileMeta(store[resolved]);
-  return { ...DEFAULT_FILE_META, tags: [] };
-}
-
-async function writeFileMeta(filePath, meta) {
-  const resolved = path.resolve(filePath);
-  const normalized = normalizeFileMeta(meta);
-  const payload = JSON.stringify(normalized);
-  const wroteXattr = await writeXattrRaw(resolved, payload);
-
-  const store = loadFallbackMetaStoreSync();
-  if (wroteXattr) {
-    if (store[resolved]) {
-      delete store[resolved];
-      saveFallbackMetaStoreSync(store);
-    }
-  } else {
-    store[resolved] = normalized;
-    saveFallbackMetaStoreSync(store);
-  }
-  return normalized;
-}
-
-function ensureMarkdownExtension(name) {
-  const trimmed = String(name || '').trim();
-  if (!trimmed) return null;
-  if (MARKDOWN_EXT.test(trimmed)) return trimmed;
-  return `${trimmed}.md`;
-}
-
-async function uniqueFilePath(folderPath, preferredName) {
-  const baseName = preferredName || 'Unnamed.md';
-  const extMatch = baseName.match(MARKDOWN_EXT);
-  const ext = extMatch ? extMatch[0] : '.md';
-  const stem = extMatch ? baseName.slice(0, -ext.length) : baseName;
-
-  let candidate = path.join(folderPath, `${stem}${ext}`);
-  if (!fs.existsSync(candidate)) return candidate;
-
-  let n = 2;
-  while (fs.existsSync(path.join(folderPath, `${stem}-${n}${ext}`))) {
-    n += 1;
-  }
-  return path.join(folderPath, `${stem}-${n}${ext}`);
-}
+});
 
 function queueOpenFile(filePath) {
   if (!filePath || !isMarkdownFile(filePath)) return;
@@ -268,6 +139,33 @@ function createWindow() {
     mainWindow.setTitle(APP_NAME);
   });
 
+  mainWindow.on('close', async (event) => {
+    if (isQuitting || !rendererDirty) return;
+    event.preventDefault();
+    const { response } = await dialog.showMessageBox(mainWindow, {
+      type: 'question',
+      buttons: ['Save', "Don't Save", 'Cancel'],
+      defaultId: 0,
+      cancelId: 2,
+      message: 'Do you want to save your changes?',
+      detail: 'Your changes will be lost if you don’t save them.',
+      noLink: true,
+    });
+    if (response === 2) {
+      isQuitting = false;
+      return;
+    }
+    if (response === 0) {
+      mainWindow.webContents.send('request-save-before-quit');
+      // Renderer will call confirm-quit after save attempt.
+      return;
+    }
+    rendererDirty = false;
+    isQuitting = true;
+    mainWindow.destroy();
+    app.quit();
+  });
+
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//i.test(url)) shell.openExternal(url);
     return { action: 'deny' };
@@ -280,11 +178,50 @@ function createWindow() {
     }
   });
 
+  mainWindow.webContents.on('context-menu', (_event, params) => {
+    if (!params.isEditable && !params.selectionText) return;
+
+    const items = [];
+    for (const suggestion of params.dictionarySuggestions || []) {
+      items.push({
+        label: suggestion,
+        click: () => mainWindow.webContents.replaceMisspelling(suggestion),
+      });
+    }
+    if (params.misspelledWord) {
+      if (items.length) items.push({ type: 'separator' });
+      items.push({
+        label: 'Add to Dictionary',
+        click: () =>
+          mainWindow.webContents.session.addWordToSpellCheckerDictionary(params.misspelledWord),
+      });
+      items.push({ type: 'separator' });
+    }
+    if (params.isEditable) {
+      items.push(
+        { role: 'cut', enabled: params.editFlags?.canCut !== false },
+        { role: 'copy', enabled: params.editFlags?.canCopy !== false },
+        { role: 'paste', enabled: params.editFlags?.canPaste !== false },
+        { type: 'separator' },
+        { role: 'selectAll' },
+      );
+    } else if (params.selectionText) {
+      items.push({ role: 'copy' });
+    }
+
+    if (!items.length) return;
+    const menu = Menu.buildFromTemplate(items);
+    const opts = { window: mainWindow };
+    if (params.frame) opts.frame = params.frame;
+    menu.popup(opts);
+  });
+
   buildMenu();
 
   mainWindow.webContents.once('did-finish-load', () => {
+    const cachedSystemFonts = getCachedSystemFonts();
     if (cachedSystemFonts?.length) {
-      notifyFontsUpdated(cachedSystemFonts);
+      mainWindow.webContents.send('fonts-updated', cachedSystemFonts);
     }
     getMarkdownPathsFromArgv(process.argv).forEach(queueOpenFile);
     flushPendingOpenFiles();
@@ -348,45 +285,6 @@ function buildMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-async function readDirectory(dirPath) {
-  const entries = await fsp.readdir(dirPath, { withFileTypes: true });
-  const items = [];
-
-  for (const entry of entries) {
-    if (entry.name.startsWith('.')) continue;
-    if (!entry.isFile()) continue;
-    if (!MARKDOWN_EXT.test(entry.name)) continue;
-
-    const filePath = path.join(dirPath, entry.name);
-    let mtime = 0;
-    let birthtime = 0;
-    let size = 0;
-    try {
-      const stat = await fsp.stat(filePath);
-      mtime = stat.mtimeMs || 0;
-      birthtime = stat.birthtimeMs || stat.ctimeMs || mtime;
-      size = stat.size || 0;
-    } catch {
-      /* ignore stat errors */
-    }
-
-    const meta = await readFileMeta(filePath);
-    items.push({
-      name: entry.name,
-      path: filePath,
-      type: 'file',
-      mtime,
-      birthtime,
-      size,
-      tags: meta.tags,
-      pinned: meta.pinned,
-    });
-  }
-
-  items.sort((a, b) => a.name.localeCompare(b.name));
-  return items;
-}
-
 ipcMain.handle('open-file-dialog', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openFile'],
@@ -417,8 +315,68 @@ ipcMain.handle('read-file', async (_event, filePath) => {
   return { filePath, content, fileName: path.basename(filePath) };
 });
 
-ipcMain.handle('save-file', async (_event, filePath, content) => {
-  await fsp.writeFile(filePath, content, 'utf-8');
+function assertWritablePath(filePath) {
+  if (!filePath || typeof filePath !== 'string') {
+    throw new Error('Invalid file path');
+  }
+  const resolved = path.resolve(filePath);
+  if (resolved.includes('\0')) throw new Error('Invalid file path');
+  return resolved;
+}
+
+ipcMain.handle('save-file', async (_event, filePath, content, options = {}) => {
+  const resolved = assertWritablePath(filePath);
+  if (options.expectedMtime != null) {
+    try {
+      const stat = await fsp.stat(resolved);
+      if (Math.abs((stat.mtimeMs || 0) - options.expectedMtime) > 1) {
+        return {
+          success: false,
+          conflict: true,
+          mtime: stat.mtimeMs || 0,
+        };
+      }
+    } catch {
+      /* file may be missing; allow recreate */
+    }
+  }
+  await fsp.writeFile(resolved, content, 'utf-8');
+  invalidateMetaCache(resolved);
+  const stat = await fsp.stat(resolved);
+  return { success: true, mtime: stat.mtimeMs || 0, size: stat.size || 0 };
+});
+
+ipcMain.handle('get-file-stat', async (_event, filePath) => {
+  try {
+    const resolved = assertWritablePath(filePath);
+    const stat = await fsp.stat(resolved);
+    return {
+      exists: true,
+      mtime: stat.mtimeMs || 0,
+      size: stat.size || 0,
+      isFile: stat.isFile(),
+    };
+  } catch {
+    return { exists: false, mtime: 0, size: 0, isFile: false };
+  }
+});
+
+ipcMain.handle('show-message-box', async (event, options = {}) => {
+  const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+  const result = await dialog.showMessageBox(win, {
+    type: options.type || 'question',
+    buttons: options.buttons || ['OK'],
+    defaultId: options.defaultId ?? 0,
+    cancelId: options.cancelId,
+    message: options.message || '',
+    detail: options.detail || undefined,
+    noLink: true,
+  });
+  return { response: result.response };
+});
+
+ipcMain.handle('set-dirty', async (_event, dirty) => {
+  rendererDirty = Boolean(dirty);
   return { success: true };
 });
 
@@ -468,11 +426,12 @@ ipcMain.handle('rename-file', async (_event, { oldPath, newName } = {}) => {
     throw new Error('A file with that name already exists');
   }
 
-  const meta = await readFileMeta(oldPath);
+  const fileMeta = await readFileMeta(oldPath);
   await fsp.rename(oldPath, newPath);
-  await writeFileMeta(newPath, meta);
+  await writeFileMeta(newPath, fileMeta);
 
   const oldResolved = path.resolve(oldPath);
+  invalidateMetaCache(oldResolved);
   const store = loadFallbackMetaStoreSync();
   if (store[oldResolved]) {
     delete store[oldResolved];
@@ -493,10 +452,7 @@ ipcMain.handle('update-file-meta', async (_event, { filePath, tags, pinned } = {
   return { filePath, ...saved };
 });
 
-ipcMain.handle('show-file-context-menu', async (event, payload = {}) => {
-  const { filePath, pinned = false, tags = [], x, y } = payload;
-  if (!filePath) return null;
-
+function popupMenuAtCursor(event, template) {
   const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
   return new Promise((resolve) => {
     let settled = false;
@@ -506,74 +462,69 @@ ipcMain.handle('show-file-context-menu', async (event, payload = {}) => {
       resolve(result);
     };
 
-    const tagItems = (Array.isArray(tags) ? tags : []).map((tag) => ({
-      label: `Remove Tag “${tag}”`,
-      click: () => done({ action: 'remove-tag', tag }),
-    }));
+    const menu = Menu.buildFromTemplate(
+      template.map((item) => {
+        if (typeof item.click === 'function') {
+          const original = item.click;
+          return {
+            ...item,
+            click: () => original(done),
+          };
+        }
+        return item;
+      }),
+    );
 
-    const template = [
-      {
-        label: pinned ? 'Unpin' : 'Pin',
-        accelerator: 'CmdOrCtrl+Shift+P',
-        click: () => done({ action: 'pin' }),
-      },
-      {
-        label: 'Rename…',
-        accelerator: 'F2',
-        click: () => done({ action: 'rename' }),
-      },
-      { type: 'separator' },
-      {
-        label: 'Add Tag…',
-        accelerator: 'CmdOrCtrl+E',
-        click: () => done({ action: 'add-tag' }),
-      },
-      ...tagItems,
-    ];
-
-    const menu = Menu.buildFromTemplate(template);
     const opts = {
       window: win,
       callback: () => done(null),
     };
-    if (typeof x === 'number' && typeof y === 'number') {
-      opts.x = Math.round(x);
-      opts.y = Math.round(y);
-    }
+    if (event.senderFrame) opts.frame = event.senderFrame;
+    // Intentionally omit x/y so Electron uses the OS cursor position (correct at any zoom).
     menu.popup(opts);
   });
+}
+
+ipcMain.handle('show-file-context-menu', async (event, payload = {}) => {
+  const { filePath, pinned = false, tags = [] } = payload;
+  if (!filePath) return null;
+
+  const tagItems = (Array.isArray(tags) ? tags : []).map((tag) => ({
+    label: `Remove Tag “${tag}”`,
+    click: (done) => done({ action: 'remove-tag', tag }),
+  }));
+
+  return popupMenuAtCursor(event, [
+    {
+      label: pinned ? 'Unpin' : 'Pin',
+      accelerator: 'CmdOrCtrl+Shift+P',
+      click: (done) => done({ action: 'pin' }),
+    },
+    {
+      label: 'Rename…',
+      accelerator: 'F2',
+      click: (done) => done({ action: 'rename' }),
+    },
+    { type: 'separator' },
+    {
+      label: 'Add Tag…',
+      accelerator: 'CmdOrCtrl+E',
+      click: (done) => done({ action: 'add-tag' }),
+    },
+    ...tagItems,
+  ]);
 });
 
 ipcMain.handle('show-tag-context-menu', async (event, payload = {}) => {
-  const { tag, x, y } = payload;
+  const { tag } = payload;
   if (!tag) return null;
 
-  const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
-  return new Promise((resolve) => {
-    let settled = false;
-    const done = (result) => {
-      if (settled) return;
-      settled = true;
-      resolve(result);
-    };
-
-    const menu = Menu.buildFromTemplate([
-      {
-        label: `Remove “${tag}”`,
-        click: () => done({ action: 'remove', tag }),
-      },
-    ]);
-
-    const opts = {
-      window: win,
-      callback: () => done(null),
-    };
-    if (typeof x === 'number' && typeof y === 'number') {
-      opts.x = Math.round(x);
-      opts.y = Math.round(y);
-    }
-    menu.popup(opts);
-  });
+  return popupMenuAtCursor(event, [
+    {
+      label: `Remove “${tag}”`,
+      click: (done) => done({ action: 'remove', tag }),
+    },
+  ]);
 });
 
 ipcMain.handle('list-folder', async (_event, folderPath) => {
@@ -596,198 +547,15 @@ ipcMain.handle('path-exists', async (_event, targetPath) => {
   }
 });
 
-function sortFontFamilies(families) {
-  return [...new Set(families.filter(Boolean))].sort((a, b) =>
-    a.localeCompare(b, undefined, { sensitivity: 'base' }),
-  );
-}
-
-async function getMacOSFonts() {
-  const profiler = fs.existsSync('/usr/sbin/system_profiler')
-    ? '/usr/sbin/system_profiler'
-    : 'system_profiler';
-  const { stdout } = await execFileAsync(profiler, ['-json', 'SPFontsDataType'], {
-    maxBuffer: 64 * 1024 * 1024,
-  });
-  const data = JSON.parse(stdout);
-  const families = [];
-
-  for (const font of data.SPFontsDataType || []) {
-    if (typeof font.family === 'string' && font.family.trim()) {
-      families.push(font.family.trim());
-    }
-
-    for (const typeface of font.typefaces || []) {
-      if (typeof typeface.family === 'string' && typeface.family.trim()) {
-        families.push(typeface.family.trim());
-      }
-    }
-  }
-
-  return sortFontFamilies(families);
-}
-
-async function getWindowsFonts() {
-  const script =
-    'Add-Type -AssemblyName System.Drawing; ' +
-    '[System.Drawing.Text.InstalledFontCollection]::new().Families | ' +
-    'ForEach-Object { $_.Name }';
-  const { stdout } = await execFileAsync(
-    'powershell.exe',
-    ['-NoProfile', '-Command', script],
-    { maxBuffer: 16 * 1024 * 1024 },
-  );
-  return sortFontFamilies(stdout.split(/\r?\n/));
-}
-
-async function getLinuxFonts() {
-  const { stdout } = await execFileAsync('fc-list', [':family', '--format=%{family}\n'], {
-    maxBuffer: 16 * 1024 * 1024,
-  });
-  const families = [];
-
-  for (const line of stdout.split('\n')) {
-    for (const part of line.split(',')) {
-      const name = part.trim();
-      if (name) families.push(name);
-    }
-  }
-
-  return sortFontFamilies(families);
-}
-
-async function readFontCache() {
-  try {
-    const raw = await fsp.readFile(getFontCachePath(), 'utf-8');
-    const parsed = JSON.parse(raw);
-    if (parsed.platform && parsed.platform !== process.platform) return null;
-    if (Array.isArray(parsed.fonts) && parsed.fonts.length) {
-      return parsed.fonts;
-    }
-  } catch {
-    /* no cache yet */
-  }
-  return null;
-}
-
-async function writeFontCache(fonts) {
-  await fsp.writeFile(
-    getFontCachePath(),
-    JSON.stringify({ fonts, updatedAt: Date.now(), platform: process.platform }),
-    'utf-8',
-  );
-}
-
-async function enumerateSystemFonts() {
-  if (process.platform === 'darwin') return getMacOSFonts();
-  if (process.platform === 'win32') return getWindowsFonts();
-  return getLinuxFonts();
-}
-
-async function refreshSystemFonts({ broadcast = false } = {}) {
-  const previous = cachedSystemFonts ? [...cachedSystemFonts] : [];
-  const scanned = await enumerateSystemFonts();
-  const merged = mergeFontLists(previous, scanned);
-  cachedSystemFonts = merged;
-  await writeFontCache(merged).catch(() => {});
-  if (broadcast && fontsListChanged(previous, merged)) {
-    notifyFontsUpdated(merged);
-  }
-  return merged;
-}
-
-function notifyFontsUpdated(fonts) {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('fonts-updated', fonts);
-  }
-}
-
-function startFontScan({ broadcastOnComplete = false } = {}) {
-  if (fontScanPromise) return fontScanPromise;
-
-  fontScanPromise = refreshSystemFonts({ broadcast: broadcastOnComplete })
-    .catch((err) => {
-      console.error('Failed to enumerate system fonts:', err);
-      if (!cachedSystemFonts) cachedSystemFonts = [];
-      return cachedSystemFonts;
-    })
-    .finally(() => {
-      fontScanPromise = null;
-    });
-
-  return fontScanPromise;
-}
-
-async function getSystemFonts() {
-  if (cachedSystemFonts) return cachedSystemFonts;
-
-  const cached = await readFontCache();
-  if (cached) {
-    cachedSystemFonts = cached;
-    startFontScan({ broadcastOnComplete: true });
-    return cachedSystemFonts;
-  }
-
-  if (fontScanPromise) return fontScanPromise;
-  return startFontScan({ broadcastOnComplete: true });
-}
-
 ipcMain.handle('get-system-fonts', async () => getSystemFonts());
-
-function stopFolderWatch() {
-  if (folderWatchTimer) {
-    clearTimeout(folderWatchTimer);
-    folderWatchTimer = null;
-  }
-  if (folderWatcher) {
-    folderWatcher.close();
-    folderWatcher = null;
-  }
-  folderWatchPath = null;
-}
-
-async function emitFolderChanged(folderPath) {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  try {
-    const items = await readDirectory(folderPath);
-    mainWindow.webContents.send('folder-changed', { folderPath, items });
-  } catch {
-    /* ignore read errors during watch */
-  }
-}
-
-function scheduleFolderRefresh(folderPath) {
-  if (folderWatchTimer) clearTimeout(folderWatchTimer);
-  folderWatchTimer = setTimeout(() => {
-    folderWatchTimer = null;
-    emitFolderChanged(folderPath);
-  }, 300);
-}
 
 ipcMain.handle('watch-folder', async (_event, folderPath) => {
   if (!folderPath) return { success: false };
-
-  const resolved = path.resolve(folderPath);
-  if (folderWatchPath === resolved && folderWatcher) {
-    return { success: true };
-  }
-
-  stopFolderWatch();
-
-  try {
-    folderWatcher = fs.watch(resolved, { persistent: false }, () => {
-      scheduleFolderRefresh(resolved);
-    });
-    folderWatchPath = resolved;
-    return { success: true };
-  } catch {
-    stopFolderWatch();
-    return { success: false };
-  }
+  return { success: folderWatch.watch(folderPath) };
 });
 
 ipcMain.handle('unwatch-folder', async () => {
-  stopFolderWatch();
+  folderWatch.stop();
   return { success: true };
 });
 
@@ -795,11 +563,15 @@ ipcMain.handle('resolve-image-path', async (_event, markdownFilePath, src) => {
   if (!markdownFilePath || !src) return null;
 
   const href = src.trim();
-  if (/^(https?:|data:|file:|mailto:)/i.test(href)) return href;
+  if (/^(data:|file:|mailto:)/i.test(href)) return href;
+  // Remote images are blocked by CSP by default; do not resolve http(s) to file URLs.
+  if (/^https?:\/\//i.test(href)) return null;
 
-  const baseDir = path.dirname(markdownFilePath);
+  const baseDir = path.resolve(path.dirname(markdownFilePath));
   const withoutHash = href.split('#')[0].split('?')[0];
   const absolutePath = path.resolve(baseDir, withoutHash);
+  const relative = path.relative(baseDir, absolutePath);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) return null;
 
   try {
     const stat = await fsp.stat(absolutePath);
@@ -808,6 +580,19 @@ ipcMain.handle('resolve-image-path', async (_event, markdownFilePath, src) => {
   } catch {
     return null;
   }
+});
+
+ipcMain.handle('confirm-quit', async () => {
+  rendererDirty = false;
+  isQuitting = true;
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.destroy();
+  app.quit();
+  return { success: true };
+});
+
+ipcMain.handle('cancel-quit', async () => {
+  isQuitting = false;
+  return { success: true };
 });
 
 // macOS: open .md files from Finder / double-click
@@ -844,6 +629,21 @@ app.whenReady().then(() => {
   loadFontCacheSync();
   startFontScan({ broadcastOnComplete: true }).catch(() => {});
   createWindow();
+});
+
+app.on('before-quit', (event) => {
+  if (isQuitting || !rendererDirty) {
+    isQuitting = true;
+    return;
+  }
+  event.preventDefault();
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    isQuitting = true;
+    app.exit(0);
+    return;
+  }
+  // Reuse the window close flow so Save / Don't Save / Cancel is shown once.
+  mainWindow.close();
 });
 
 app.on('window-all-closed', () => {

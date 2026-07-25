@@ -5,13 +5,19 @@ contextBridge.exposeInMainWorld('api', {
   openFileDialog: () => ipcRenderer.invoke('open-file-dialog'),
   openFolderDialog: () => ipcRenderer.invoke('open-folder-dialog'),
   readFile: (filePath) => ipcRenderer.invoke('read-file', filePath),
-  saveFile: (filePath, content) => ipcRenderer.invoke('save-file', filePath, content),
+  saveFile: (filePath, content, options) =>
+    ipcRenderer.invoke('save-file', filePath, content, options),
   saveFileDialog: (options) => ipcRenderer.invoke('save-file-dialog', options),
   createFile: (options) => ipcRenderer.invoke('create-file', options),
   renameFile: (options) => ipcRenderer.invoke('rename-file', options),
   updateFileMeta: (options) => ipcRenderer.invoke('update-file-meta', options),
   showFileContextMenu: (options) => ipcRenderer.invoke('show-file-context-menu', options),
   showTagContextMenu: (options) => ipcRenderer.invoke('show-tag-context-menu', options),
+  showMessageBox: (options) => ipcRenderer.invoke('show-message-box', options),
+  getFileStat: (filePath) => ipcRenderer.invoke('get-file-stat', filePath),
+  setDirty: (dirty) => ipcRenderer.invoke('set-dirty', dirty),
+  confirmQuit: () => ipcRenderer.invoke('confirm-quit'),
+  cancelQuit: () => ipcRenderer.invoke('cancel-quit'),
   listFolder: (folderPath) => ipcRenderer.invoke('list-folder', folderPath),
   pathExists: (targetPath) => ipcRenderer.invoke('path-exists', targetPath),
   watchFolder: (folderPath) => ipcRenderer.invoke('watch-folder', folderPath),
@@ -36,6 +42,10 @@ contextBridge.exposeInMainWorld('api', {
   onOpenFilePath: (callback) => ipcRenderer.on('open-file-path', (_event, filePath) => callback(filePath)),
   onFolderChanged: (callback) =>
     ipcRenderer.on('folder-changed', (_event, payload) => callback(payload)),
+  onFolderWatchError: (callback) =>
+    ipcRenderer.on('folder-watch-error', (_event, payload) => callback(payload)),
   onFontsUpdated: (callback) =>
     ipcRenderer.on('fonts-updated', (_event, fonts) => callback(fonts)),
+  onRequestSaveBeforeQuit: (callback) =>
+    ipcRenderer.on('request-save-before-quit', () => callback()),
 });

@@ -11,6 +11,8 @@
   "scripts": {
     "start": "env -u ELECTRON_RUN_AS_NODE electron .",
     "dev": "env -u ELECTRON_RUN_AS_NODE electron .",
+    "lint": "eslint .",
+    "test": "node tests/smoke.js",
     "pack": "electron-builder --dir",
     "dist": "electron-builder"
   },
@@ -23,8 +25,11 @@
     "preview"
   ],
   "devDependencies": {
+    "@eslint/js": "^9.32.0",
     "electron": "^42.3.0",
     "electron-builder": "^26.8.1",
+    "eslint": "^9.32.0",
+    "globals": "^16.3.0",
     "marked": "^15.0.0"
   },
   "build": {
@@ -38,6 +43,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "lib/**/*",
       "src/**/*",
       "!**/*.map"
     ],

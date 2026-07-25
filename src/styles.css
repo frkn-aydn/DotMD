@@ -753,7 +753,24 @@ body.sidebar-resizing * {
   font-size: 13px;
   cursor: pointer;
   color: var(--text-muted);
+}
+
+.file-list li.animate-in {
   animation: fadeInUp 0.3s ease backwards;
+}
+
+.file-list li.file-list-spacer {
+  padding: 0;
+  margin: 0;
+  border: none;
+  pointer-events: none;
+  cursor: default;
+}
+
+.file-list li.context-target {
+  background: var(--hover);
+  color: var(--text);
+  outline: 1px solid var(--accent);
 }
 
 .file-list li .file-row {
