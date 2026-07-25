@@ -582,6 +582,69 @@ ipcMain.handle('resolve-image-path', async (_event, markdownFilePath, src) => {
   }
 });
 
+ipcMain.handle('resolve-link-path', async (_event, markdownFilePath, href) => {
+  if (!href || typeof href !== 'string') return null;
+
+  const trimmed = href.trim();
+  if (!trimmed || trimmed.startsWith('javascript:')) return null;
+
+  if (/^https?:\/\//i.test(trimmed) || /^mailto:/i.test(trimmed)) {
+    return { type: 'external', url: trimmed };
+  }
+
+  const hashIndex = trimmed.indexOf('#');
+  const hash = hashIndex >= 0 ? trimmed.slice(hashIndex + 1) : '';
+  const pathPart = (hashIndex >= 0 ? trimmed.slice(0, hashIndex) : trimmed).split('?')[0];
+
+  if (!pathPart) {
+    return { type: 'anchor', hash };
+  }
+
+  if (/^(file:|data:)/i.test(pathPart)) return null;
+  if (!markdownFilePath) return null;
+
+  let decoded = pathPart;
+  try {
+    decoded = decodeURIComponent(pathPart);
+  } catch {
+    /* keep raw */
+  }
+  if (decoded.includes('\0')) return null;
+
+  const baseDir = path.resolve(path.dirname(markdownFilePath));
+  const absolutePath = path.resolve(baseDir, decoded);
+
+  try {
+    const stat = await fsp.stat(absolutePath);
+    if (!stat.isFile()) {
+      return { type: 'missing', path: absolutePath, hash };
+    }
+    return {
+      type: isMarkdownFile(absolutePath) ? 'markdown' : 'file',
+      path: absolutePath,
+      hash,
+    };
+  } catch {
+    return { type: 'missing', path: absolutePath, hash };
+  }
+});
+
+ipcMain.handle('open-external', async (_event, url) => {
+  if (!url || typeof url !== 'string') return { success: false };
+  const trimmed = url.trim();
+  if (!/^(https?:|mailto:)/i.test(trimmed)) return { success: false };
+  await shell.openExternal(trimmed);
+  return { success: true };
+});
+
+ipcMain.handle('open-path', async (_event, targetPath) => {
+  if (!targetPath || typeof targetPath !== 'string' || targetPath.includes('\0')) {
+    return { success: false };
+  }
+  const error = await shell.openPath(path.resolve(targetPath));
+  return { success: !error, error: error || undefined };
+});
+
 ipcMain.handle('confirm-quit', async () => {
   rendererDirty = false;
   isQuitting = true;

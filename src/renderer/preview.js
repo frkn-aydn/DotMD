@@ -1,5 +1,5 @@
 import { state, elements } from './state.js';
-import { debounce } from './utils.js';
+import { debounce, showAlert } from './utils.js';
 import { refreshFindHighlights } from './find.js';
 
 let selectionChangeBound = false;
@@ -249,3 +249,109 @@ export const scheduleSplitScrollSync = debounce(() => {
 }, 16);
 
 export const debouncedPreview = debounce(updatePreview, 60);
+
+function slugifyHeading(text) {
+  return String(text || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, '')
+    .replace(/\s+/g, '-');
+}
+
+function scrollPreviewToHash(hash) {
+  if (!hash) return;
+  const decoded = (() => {
+    try {
+      return decodeURIComponent(hash);
+    } catch {
+      return hash;
+    }
+  })();
+
+  const byId = elements.preview.querySelector(`#${CSS.escape(decoded)}`);
+  if (byId) {
+    byId.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    return;
+  }
+
+  const headings = elements.preview.querySelectorAll('h1, h2, h3, h4, h5, h6');
+  for (const heading of headings) {
+    if (slugifyHeading(heading.textContent) === slugifyHeading(decoded)) {
+      heading.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      return;
+    }
+  }
+}
+
+function isUnderCurrentFolder(filePath) {
+  if (!state.currentFolderPath || !filePath) return false;
+  if (state.folderItems.some((item) => item.path === filePath)) return true;
+  const folder = state.currentFolderPath.replace(/[/\\]+$/, '');
+  const parent = filePath.replace(/[/\\][^/\\]+$/, '');
+  return parent === folder;
+}
+
+async function handlePreviewLinkClick(event) {
+  const anchor = event.target.closest('a[href]');
+  if (!anchor || !elements.preview.contains(anchor)) return;
+
+  const href = anchor.getAttribute('href');
+  if (!href) return;
+
+  event.preventDefault();
+
+  try {
+    const resolved = await window.api.resolveLinkPath(state.currentFilePath, href);
+    if (!resolved) return;
+
+    if (resolved.type === 'external') {
+      await window.api.openExternal(resolved.url);
+      return;
+    }
+
+    if (resolved.type === 'anchor') {
+      scrollPreviewToHash(resolved.hash);
+      return;
+    }
+
+    if (resolved.type === 'missing') {
+      await showAlert('Linked file not found', resolved.path || href);
+      return;
+    }
+
+    if (resolved.type === 'file') {
+      await window.api.openPath(resolved.path);
+      return;
+    }
+
+    if (resolved.type === 'markdown') {
+      if (resolved.path === state.currentFilePath) {
+        if (resolved.hash) scrollPreviewToHash(resolved.hash);
+        return;
+      }
+
+      const { selectFile, openFileFromPath } = await import('./workspace.js');
+      if (isUnderCurrentFolder(resolved.path)) {
+        await selectFile(resolved.path);
+      } else {
+        await openFileFromPath(resolved.path);
+      }
+
+      if (resolved.hash) {
+        // Wait for preview to render the newly opened file.
+        requestAnimationFrame(() => {
+          setTimeout(() => scrollPreviewToHash(resolved.hash), 50);
+        });
+      }
+    }
+  } catch (err) {
+    await showAlert('Could not open link', err.message || String(err));
+  }
+}
+
+export function initPreviewLinks() {
+  elements.preview.addEventListener('click', (event) => {
+    if (!event.target.closest('a[href]')) return;
+    handlePreviewLinkClick(event);
+  });
+}

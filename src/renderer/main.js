@@ -3,7 +3,7 @@ import { state, elements, initElements } from './state.js';
 import { initSettings, populateFontSelects, applySystemFonts, openSettings } from './settings.js';
 import { initEditor, updateStatus } from './editor.js';
 import { initFindBar, openFindBar } from './find.js';
-import { setMode } from './preview.js';
+import { setMode, initPreviewLinks } from './preview.js';
 import {
   initFileListSearch,
   initFileListDelegation,
@@ -121,6 +121,7 @@ initElements();
 initPlatform();
 initModeSwitch();
 initEditor();
+initPreviewLinks();
 initButtons();
 initFileListSearch();
 initFileListDelegation();

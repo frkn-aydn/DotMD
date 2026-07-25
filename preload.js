@@ -25,6 +25,10 @@ contextBridge.exposeInMainWorld('api', {
   getSystemFonts: () => ipcRenderer.invoke('get-system-fonts'),
   resolveImagePath: (markdownFilePath, src) =>
     ipcRenderer.invoke('resolve-image-path', markdownFilePath, src),
+  resolveLinkPath: (markdownFilePath, href) =>
+    ipcRenderer.invoke('resolve-link-path', markdownFilePath, href),
+  openExternal: (url) => ipcRenderer.invoke('open-external', url),
+  openPath: (targetPath) => ipcRenderer.invoke('open-path', targetPath),
 
   onMenuNewFile: (callback) => ipcRenderer.on('menu-new-file', callback),
   onMenuOpenFile: (callback) => ipcRenderer.on('menu-open-file', callback),
