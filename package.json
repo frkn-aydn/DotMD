@@ -1,7 +1,7 @@
 {
   "name": "dotmd",
   "productName": "DotMD",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "DotMD — a minimal, cross-platform Markdown viewer and editor with View, Edit, and Split modes.",
   "main": "main.js",
   "author": "Furkan AYDIN",
